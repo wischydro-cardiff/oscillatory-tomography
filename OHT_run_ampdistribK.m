@@ -123,6 +123,7 @@ for i = 1:1:num_omegas
                 H_omega{2}(j,:) = H_omega{2}(j,:).*exp(lnSs)';
             end
             %Using derivative of amplitude (\Phi_real^2 + \Phi_imag^2)^0.5
+            %Function only returns sensitivity with respect to K
             H(firstobs:lastobs,:) = repmat([real(Phi_omega)./abs(Phi_omega)]',num_obs(i),1).*real([H_omega{1}]) ...
                 +repmat([imag(Phi_omega)./abs(Phi_omega)]',num_obs(i),1).*imag([H_omega{1}]);
             run_result = H;            
