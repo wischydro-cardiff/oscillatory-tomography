@@ -5,20 +5,21 @@ clear all; close all; clc;
 
 %% Describe the setup for the forward models
 
-%Visualization and saving options
+%PARAMETERS: Visualization and saving options
 pause_length = 0.01;
 case_name = 'currtest';
+
+%PARAMETERS: Associated with domain and testing setup
 
 %Specify domain
 % [domain] = equigrid_setup(x_disc,y_disc);
 domain = struct('x',[],'y',[],'z',[]);
-domain.x = [-90:2:90];
-domain.y = [-90:2:90];
+domain.x = [-50:2:50];
+domain.y = [-50:2:50];
 domain.z = [0 1];
 
 xmin = min(domain.x); xmax = max(domain.x);
 ymin = min(domain.y); ymax = max(domain.y);
-
 
 %Specify boundary types and boundary values (x / y constant head
 %boundaries, no flux in z)
@@ -48,7 +49,7 @@ num_wells = size(well_locs,1);
 %
 V = 0.01;
 P = [10 50 100 200 400 800 1600];
-% P = [1600];
+% P = [10];
 
 test_list = [];
 for i = 1:1:numel(P)
@@ -61,6 +62,38 @@ for i = 1:1:numel(P)
         end
     end
 end
+
+% PARAMETERS: Associated with creating test case for fields
+% Test case to be generated (1 = checkerboard, 2 = geostatistical)
+relz_case = 1;
+
+%Used by both methods
+lnK_mean = -9.2;
+lnSs_mean = -11.2;
+
+%Used by checkerboard testing
+xl_check = 10; x_check_offset = 0;
+yl_check = 10; y_check_offset = 0;
+lnK_jump = 1;
+lnSs_jump = 0.05;
+
+%Used by geostatistical realization generation
+lnK_var = 4;
+lnSs_var = 0.1;
+corr_x = 20;
+corr_y = 20;
+
+%Randomization for geostatistical case
+randn('state',0)
+
+% PARAMETERS: Associated with inversion setup
+lnK_homog_guess = -9;
+lnSs_homog_guess = -11;
+var_lnK_est = 4;
+var_lnSs_est = 0.1;
+corr_x_est = 15;
+corr_y_est = 15;
+data_errorcov_guess = 1e-8;
 
 %% Create the "official" input files needed by the steady periodic model.
 
@@ -130,45 +163,29 @@ end
 
 %% For synthetic problem - true parameter field statistics
 
-%Checkerboard case
-xl_check = 20; x_offset = 10;
-yl_check = 20; y_offset = 10;
-check_pattern = sign(sin(pi*(cgrid{1}-x_offset)/xl_check)).* ...
-    sign(sin(pi*(cgrid{2}-y_offset)/yl_check));
-
-lnK_mean = -9.2; lnK_jump = 1;
-lnSs_mean = -11.2; lnSs_jump = 0.05;
-
-lnK_true_grid = lnK_mean + check_pattern.*lnK_jump;
-lnSs_true_grid = lnSs_mean + check_pattern.*lnSs_jump;
-
-lnK_true = reshape(lnK_true_grid,num_cells,1);
-lnSs_true = reshape(lnSs_true_grid,num_cells,1);
-
-% 
-% 
-% %Geostatistical Case
-% mean_lnK = -9.2;
-% var_lnK = 4;
-% 
-% mean_lnSs = -11.2;
-% var_lnSs = 0.1;
-% 
-% corr_x = 20;
-% corr_y = 20;
-% 
-% distmat_row = dimdist(coords(1,:),coords);
-% corr_row = exp(-(...
-%     (distmat_row(:,:,1)./corr_x).^2 + ...
-%     (distmat_row(:,:,2)./corr_y).^2).^.5);
-% 
-% randn('state',0)
-% [corr_relz] = toepmat_vector_math(corr_row,'r',[],2,[num_y num_x]);
-% 
-% lnK_true = corr_relz(:,1).*var_lnK.^.5 + mean_lnK;
-% lnSs_true = corr_relz(:,2).*var_lnSs.^.5 + mean_lnSs;
-% lnK_true_grid = reshape(lnK_true,num_y,num_x);
-% lnSs_true_grid = reshape(lnSs_true,num_y,num_x);
+if relz_case == 1
+    %Checkerboard case
+    check_pattern = sign(sin(pi*(cgrid{1}-x_check_offset)/xl_check)).* ...
+        sign(sin(pi*(cgrid{2}-y_check_offset)/yl_check));
+    
+    lnK_true_grid = lnK_mean + check_pattern.*lnK_jump;
+    lnSs_true_grid = lnSs_mean + check_pattern.*lnSs_jump;
+    
+    lnK_true = reshape(lnK_true_grid,num_cells,1);
+    lnSs_true = reshape(lnSs_true_grid,num_cells,1);
+elseif relz_case == 2
+    %Geostatistical Case
+    distmat_row = dimdist(coords(1,:),coords);
+    %TODO: Allow choice of different variogram models?
+    corr_row = exp(-(...
+        (distmat_row(:,:,1)./corr_x).^2 + ...
+        (distmat_row(:,:,2)./corr_y).^2).^.5);
+    [corr_relz] = toepmat_vector_math(corr_row,'r',[],2,[num_y num_x]);
+    lnK_true = corr_relz(:,1).*lnK_var.^.5 + lnK_mean;
+    lnSs_true = corr_relz(:,2).*lnSs_var.^.5 + lnSs_mean;
+    lnK_true_grid = reshape(lnK_true,num_y,num_x);
+    lnSs_true_grid = reshape(lnSs_true,num_y,num_x);
+end
 
 params_true = [lnK_true; lnSs_true];
 
@@ -228,24 +245,22 @@ Phi_function = @(params) OHT_run_distribKSs(params, ...
 H_tilde_func = @(params) OHT_run_distribKSs(params, ...
     domain,bdrys,experiment,3);
 
+%Generate example simulated data
 tic
 sim_obs = h_function(params_true);
 toc
 
+%Generate phasor field variable
 tic
 Phi_true = Phi_function(params_true);
 toc
 
-tic
+params_init = [lnK_homog_guess*ones(num_cells,1); lnSs_homog_guess*ones(num_cells,1)];
 
-params_init = [-9*ones(num_cells,1); -9*ones(num_cells,1)];
-
+%Generate example sensitivity map given initial homogeneous parameter
+%guesses
 tic
 H_adj = H_tilde_func(params_init);
-toc
-
-tic
-Phi_init = Phi_function(params_init);
 toc
 
 %% Cross-checks - visualize results and sensitivities
@@ -281,7 +296,7 @@ fig_phaseamp = figure(3);
 set(fig_phaseamp,'Position',[859 727 800 250])
 pause(1)
 
-num_totalstims = size(Phi_init,2);
+num_totalstims = size(amp_full,2);
 for i = 1:1:num_totalstims
     amp_field = reshape(log(amp_full(:,i)),num_y,num_x);
     phase_field = reshape(phase_full(:,i),num_y,num_x);
@@ -330,11 +345,7 @@ end
 %TODO: Integrate linear variogram, L-curve estimation of degree of variance
 %allowed.
 
-var_lnK_est = 4;
-var_lnSs_est = 0.1;
-
-corr_x_est = 15;
-corr_y_est = 15;
+%TODO: Allow choice of different variogram models?
 
 distmat_row = dimdist(coords(1,:),coords);
 corr_row = exp(-(...
@@ -349,13 +360,8 @@ Qprod_func = @(invec) covar_product_K_Ss(QK_row,QSs_row,invec,num_x,num_y);
 
 %% Inversion
 
-lnK_homog_guess = -9;
-lnSs_homog_guess = -11;
-
 %TODO: Use raw phasor data to generate noisy time-series data, then
 %re-extract using LSQ process
-
-data_errorcov_guess = 1e-8;
 
 params_init = [lnK_homog_guess*ones(num_cells,1); lnSs_homog_guess*ones(num_cells,1)];
 beta_init = [lnK_homog_guess; lnSs_homog_guess];
@@ -441,6 +447,8 @@ axis equal
 axis([xmin xmax ymin ymax])
 set(gca,'FontSize',14)
 
+% TODO: Revisit other useful figures - This example is difference between
+% true and estimated
 % fig_resid = figure(7);
 % set(fig_resid,'Position',[58 66 800 250])
 % pause(1)
