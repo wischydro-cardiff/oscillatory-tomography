@@ -5,11 +5,15 @@ clear all; close all; clc;
 
 %% Describe the setup for the forward models
 
+%Visualization and saving options
+pause_length = 0.01;
+case_name = 'currtest';
+
 %Specify domain
 % [domain] = equigrid_setup(x_disc,y_disc);
 domain = struct('x',[],'y',[],'z',[]);
-domain.x = [-50:2:50];
-domain.y = [-50:2:50];
+domain.x = [-90:2:90];
+domain.y = [-90:2:90];
 domain.z = [0 1];
 
 xmin = min(domain.x); xmax = max(domain.x);
@@ -45,7 +49,6 @@ num_wells = size(well_locs,1);
 V = 0.01;
 P = [10 50 100 200 400 800 1600];
 % P = [1600];
-% P = [10];
 
 test_list = [];
 for i = 1:1:numel(P)
@@ -95,7 +98,9 @@ num_cells = num_x*num_y;
 % This will loop through all observations as you hit <Enter>, showing the
 % model inputs for each individual model run that generates an observation.
 
-figure(1);
+fig_srcobs_weights = figure(1);
+set(fig_srcobs_weights,'Position',[58 726 800 250])
+pause(1)
 for i = 1:1:num_omegas
     disp(['Period = ', num2str(2*pi./experiment(i).omega)]);
     num_testobs = size(experiment(i).tests,1);
@@ -103,14 +108,6 @@ for i = 1:1:num_omegas
         pump_loc = experiment(i).tests(j,1);
         obs_loc = experiment(i).tests(j,2);
         subplot(1,2,1)
-        obsmap = reshape(full(experiment(i).obs(:,obs_loc)),num_y,num_x);
-        om = pcolor(cgrid{1},cgrid{2},obsmap);
-        set(om,'LineStyle','none')
-        colorbar
-        title(['Period group ', num2str(i), ', Observation weights, test/obs pair #', num2str(j)]);
-        axis equal
-        axis([xmin xmax ymin ymax])
-        subplot(1,2,2)
         pumpmap = reshape(full(experiment(i).stims(:,pump_loc)),num_y,num_x);
         pm = pcolor(cgrid{1},cgrid{2},pumpmap);
         set(pm,'LineStyle','none')
@@ -118,7 +115,16 @@ for i = 1:1:num_omegas
         title(['Period group ', num2str(i), ', Pump weights, test/obs pair #', num2str(j)]);
         axis equal
         axis([xmin xmax ymin ymax])
-        pause(0.1)
+        subplot(1,2,2)
+        obsmap = reshape(full(experiment(i).obs(:,obs_loc)),num_y,num_x);
+        om = pcolor(cgrid{1},cgrid{2},obsmap);
+        set(om,'LineStyle','none')
+        colorbar
+        title(['Period group ', num2str(i), ', Observation weights, test/obs pair #', num2str(j)]);
+        axis equal
+        axis([xmin xmax ymin ymax])
+
+        pause(pause_length)
     end
 end
 
@@ -169,8 +175,8 @@ params_true = [lnK_true; lnSs_true];
 lnK_range = [min(lnK_true) max(lnK_true)];
 lnSs_range = [min(lnSs_true) max(lnSs_true)];
 
-figure(2)
-set(2,'Position',[100 100 1200 400])
+fig_truefields = figure(2);
+set(fig_truefields,'Position',[58 396 800 250])
 subplot(1,2,1)
 pc1 = pcolor(cgrid{1},cgrid{2},lnK_true_grid);
 set(pc1,'LineStyle','none')
@@ -271,7 +277,10 @@ H_BSs = H_adj((numobs+1):(2*numobs),((num_cells+1):(2*num_cells)));
 
 
 %Check all phasor fields produced through numerical model running
-figure(3)
+fig_phaseamp = figure(3);
+set(fig_phaseamp,'Position',[859 727 800 250])
+pause(1)
+
 num_totalstims = size(Phi_init,2);
 for i = 1:1:num_totalstims
     amp_field = reshape(log(amp_full(:,i)),num_y,num_x);
@@ -288,10 +297,13 @@ for i = 1:1:num_totalstims
     title(['Pumping test ', num2str(i), ', Phase field'])
     axis equal
     axis([xmin xmax ymin ymax])
-    pause(0.1)
+    pause(pause_length)
 end
 
-figure(4)
+fig_sensmats = figure(4);
+set(fig_sensmats,'Position',[859 396 800 250])
+pause(1)
+
 for i = 1:1:numobs
     ampK_sens = (A_obs(i)./amp(i)).*H_AK(i,:) + (B_obs(i)./amp(i)).*H_BK(i,:);
     ampK_sensmap = reshape(ampK_sens,num_y,num_x);
@@ -310,16 +322,19 @@ for i = 1:1:numobs
     title(['Obs. ', num2str(i), ', Amplitude sensitivity to Ss'])
     axis equal
     axis([xmin xmax ymin ymax])
-    pause(0.1)
+    pause(pause_length)
 end
 
 %% Prior setup
 
+%TODO: Integrate linear variogram, L-curve estimation of degree of variance
+%allowed.
+
 var_lnK_est = 4;
 var_lnSs_est = 0.1;
 
-corr_x_est = 20;
-corr_y_est = 20;
+corr_x_est = 15;
+corr_y_est = 15;
 
 distmat_row = dimdist(coords(1,:),coords);
 corr_row = exp(-(...
@@ -356,42 +371,10 @@ negloglike_func = @(s,beta) negloglike_eval(y,X,s,beta,Q,R,h_function);
 
 %% Plotting of true vs. results
 
-figure(5)
-subplot(1,2,1)
-plot(well_locs(:,1),well_locs(:,2),'ok')
-hold on
-pc1 = pcolor(cgrid{1},cgrid{2},reshape(params_best(1:num_cells),num_y,num_x));
-plot(well_locs(:,1),well_locs(:,2),'ok')
-set(pc1,'LineStyle','none')
-hold off
-title('Estimated ln(K[m/s])')
-xlabel('x (m)')
-ylabel('y (m)')
-colorbar
-caxis(lnK_range)
-axis equal
-axis([xmin xmax ymin ymax])
-set(gca,'FontSize',16)
+fig_truecompare = figure(5);
+set(fig_truecompare,'Position',[58 66 800 250])
+pause(1)
 
-
-subplot(1,2,2)
-hold on
-pc1 = pcolor(cgrid{1},cgrid{2},reshape(params_best((num_cells+1):(2*num_cells)),num_y,num_x));
-plot(well_locs(:,1),well_locs(:,2),'ok')
-set(pc1,'LineStyle','none')
-hold off
-title('Estimated ln(Ss [1/m])')
-xlabel('x (m)')
-ylabel('y (m)')
-colorbar
-caxis(lnSs_range)
-axis equal
-axis([xmin xmax ymin ymax])
-set(gca,'FontSize',16)
-
-set(5,'Position',[100 100 1200 400])
-
-figure(6)
 subplot(1,2,1)
 hold on
 pc2 = pcolor(cgrid{1},cgrid{2},reshape(params_true(1:num_cells),num_y,num_x));
@@ -405,7 +388,7 @@ colorbar
 caxis(lnK_range)
 axis equal
 axis([xmin xmax ymin ymax])
-set(gca,'FontSize',16)
+set(gca,'FontSize',14)
 
 subplot(1,2,2)
 hold on
@@ -420,11 +403,79 @@ colorbar
 caxis(lnSs_range)
 axis equal
 axis([xmin xmax ymin ymax])
-set(gca,'FontSize',16)
+set(gca,'FontSize',14)
 
-set(6,'Position',[100 100 1200 400])
+
+fig_invimage = figure(6);
+set(fig_invimage,'Position',[58 66 800 250])
+pause(1)
+
+subplot(1,2,1)
+plot(well_locs(:,1),well_locs(:,2),'ok')
+hold on
+pc1 = pcolor(cgrid{1},cgrid{2},reshape(params_best(1:num_cells),num_y,num_x));
+plot(well_locs(:,1),well_locs(:,2),'ok')
+set(pc1,'LineStyle','none')
+hold off
+title('Estimated ln(K[m/s])')
+xlabel('x (m)')
+ylabel('y (m)')
+colorbar
+caxis(lnK_range)
+axis equal
+axis([xmin xmax ymin ymax])
+set(gca,'FontSize',14)
+
+subplot(1,2,2)
+hold on
+pc1 = pcolor(cgrid{1},cgrid{2},reshape(params_best((num_cells+1):(2*num_cells)),num_y,num_x));
+plot(well_locs(:,1),well_locs(:,2),'ok')
+set(pc1,'LineStyle','none')
+hold off
+title('Estimated ln(Ss [1/m])')
+xlabel('x (m)')
+ylabel('y (m)')
+colorbar
+caxis(lnSs_range)
+axis equal
+axis([xmin xmax ymin ymax])
+set(gca,'FontSize',14)
+
+% fig_resid = figure(7);
+% set(fig_resid,'Position',[58 66 800 250])
+% pause(1)
+% 
+% subplot(1,2,1)
+% hold on
+% pc2 = pcolor(cgrid{1},cgrid{2},reshape(params_true(1:num_cells)-params_best(1:num_cells),num_y,num_x));
+% plot(well_locs(:,1),well_locs(:,2),'ok')
+% set(pc2,'LineStyle','none')
+% hold off
+% title('True ln(K[m/s])')
+% xlabel('x (m)')
+% ylabel('y (m)')
+% colorbar
+% caxis([-lnK_jump lnK_jump])
+% axis equal
+% axis([xmin xmax ymin ymax])
+% set(gca,'FontSize',14)
+% 
+% subplot(1,2,2)
+% hold on
+% pc2 = pcolor(cgrid{1},cgrid{2},reshape(params_true((num_cells+1):(2*num_cells))-params_best((num_cells+1):(2*num_cells)),num_y,num_x));
+% plot(well_locs(:,1),well_locs(:,2),'ok')
+% set(pc2,'LineStyle','none')
+% hold off
+% title('True ln(Ss[1/m])')
+% xlabel('x (m)')
+% ylabel('y (m)')
+% colorbar
+% caxis([-lnSs_jump lnSs_jump])
+% axis equal
+% axis([xmin xmax ymin ymax])
+% set(gca,'FontSize',14)
 
 %% Save output
 
-save('inverse_test_2D_try2_out.mat')
+save(['testing_inversion_',case_name, '.mat'])
 
