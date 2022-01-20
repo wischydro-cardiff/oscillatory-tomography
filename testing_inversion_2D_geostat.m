@@ -1,6 +1,5 @@
 %% Cleanup
 
-%MODIFY this code to simplify (when generating data, etc.)
 clear all; close all; clc;
 
 %% Describe the setup for the forward models
